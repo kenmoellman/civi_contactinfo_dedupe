@@ -13,8 +13,8 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
   public function run(): void {
     CRM_Utils_System::setTitle(E::ts('Contact Info Dedupe - Cleanup'));
 
-    // Handle AJAX requests
-    $action = CRM_Utils_Request::retrieve('action_type', 'String', $this, false);
+    // Handle AJAX requests — use CRM_Utils_Request without $this to avoid session caching
+    $action = CRM_Utils_Request::retrieve('action_type', 'String');
     if ($action === 'find') {
       $this->handleFind();
       return;
@@ -25,6 +25,10 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
     }
     if ($action === 'process_all') {
       $this->handleProcessAll();
+      return;
+    }
+    if ($action === 'consensus') {
+      $this->handleConsensus();
       return;
     }
 
@@ -43,18 +47,19 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
    * Handle AJAX find duplicates request.
    */
   private function handleFind(): void {
-    $entityType = CRM_Utils_Request::retrieve('entity_type', 'String', $this, true);
-    $startId = CRM_Utils_Request::retrieve('start_id', 'Integer', $this, false);
-    $endId = CRM_Utils_Request::retrieve('end_id', 'Integer', $this, false);
-    $page = CRM_Utils_Request::retrieve('page', 'Integer', $this, false, 1);
-    $pageSize = CRM_Utils_Request::retrieve('page_size', 'Integer', $this, false, 25);
+    $entityType = CRM_Utils_Request::retrieve('entity_type', 'String', CRM_Core_DAO::$_nullObject, true);
+    $startId = CRM_Utils_Request::retrieve('start_id', 'Integer');
+    $endId = CRM_Utils_Request::retrieve('end_id', 'Integer');
+    $page = CRM_Utils_Request::retrieve('pg', 'Integer', CRM_Core_DAO::$_nullObject, false, 1);
+    $pageSize = CRM_Utils_Request::retrieve('page_size', 'Integer', CRM_Core_DAO::$_nullObject, false, 25);
+    $ignorePlus4 = (bool) CRM_Utils_Request::retrieve('ignore_plus4', 'Integer');
+    $ignoreGeocode = (bool) CRM_Utils_Request::retrieve('ignore_geocode', 'Integer');
 
     $offset = ($page - 1) * $pageSize;
 
-    $deduper = $this->getDeduper($entityType);
+    $deduper = $this->getDeduper($entityType, $ignorePlus4, $ignoreGeocode);
     if (!$deduper) {
-      CRM_Utils_JSON::output(['success' => false, 'error' => 'Invalid entity type']);
-      return;
+      $this->sendJson(['success' => false, 'error' => 'Invalid entity type']);
     }
 
     $result = $deduper->findDuplicates(
@@ -64,7 +69,7 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
       $offset
     );
 
-    CRM_Utils_JSON::output([
+    $this->sendJson([
       'success' => true,
       'duplicates' => $result['duplicates'],
       'total' => $result['total'],
@@ -83,11 +88,12 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
 
     $entityType = $data['entity_type'] ?? '';
     $pairs = $data['pairs'] ?? [];
+    $ignorePlus4 = !empty($data['ignore_plus4']);
+    $ignoreGeocode = !empty($data['ignore_geocode']);
 
-    $deduper = $this->getDeduper($entityType);
+    $deduper = $this->getDeduper($entityType, $ignorePlus4, $ignoreGeocode);
     if (!$deduper) {
-      CRM_Utils_JSON::output(['success' => false, 'error' => 'Invalid entity type']);
-      return;
+      $this->sendJson(['success' => false, 'error' => 'Invalid entity type']);
     }
 
     $processed = 0;
@@ -112,7 +118,7 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
       }
     }
 
-    CRM_Utils_JSON::output([
+    $this->sendJson([
       'success' => true,
       'processed' => $processed,
       'skipped' => $skipped,
@@ -130,11 +136,12 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
     $entityType = $data['entity_type'] ?? '';
     $startId = !empty($data['start_id']) ? (int) $data['start_id'] : null;
     $endId = !empty($data['end_id']) ? (int) $data['end_id'] : null;
+    $ignorePlus4 = !empty($data['ignore_plus4']);
+    $ignoreGeocode = !empty($data['ignore_geocode']);
 
-    $deduper = $this->getDeduper($entityType);
+    $deduper = $this->getDeduper($entityType, $ignorePlus4, $ignoreGeocode);
     if (!$deduper) {
-      CRM_Utils_JSON::output(['success' => false, 'error' => 'Invalid entity type']);
-      return;
+      $this->sendJson(['success' => false, 'error' => 'Invalid entity type']);
     }
 
     $processed = 0;
@@ -164,7 +171,7 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
       }
     } while ($batchProcessed > 0 && $result['total'] > 0);
 
-    CRM_Utils_JSON::output([
+    $this->sendJson([
       'success' => true,
       'processed' => $processed,
       'skipped' => $skipped,
@@ -172,15 +179,53 @@ class CRM_ContactinfoDedupe_Page_DedupeSearch extends CRM_Core_Page {
   }
 
   /**
+   * Handle AJAX consensus request — normalize field values across duplicate groups.
+   */
+  private function handleConsensus(): void {
+    $rawInput = file_get_contents('php://input');
+    $data = json_decode($rawInput, true);
+
+    $startId = !empty($data['start_id']) ? (int) $data['start_id'] : null;
+    $endId = !empty($data['end_id']) ? (int) $data['end_id'] : null;
+
+    $deduper = new CRM_ContactinfoDedupe_Dedupe_AddressDeduper();
+    $result = $deduper->applyConsensus($startId, $endId);
+
+    $this->sendJson([
+      'success' => true,
+      'groups_processed' => $result['groups_processed'],
+      'fields_updated' => $result['fields_updated'],
+    ]);
+  }
+
+  /**
+   * Send a JSON response and exit, bypassing CiviCRM page rendering.
+   */
+  private function sendJson(array $data): void {
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    CRM_Utils_System::civiExit();
+  }
+
+  /**
    * Get the appropriate deduper for the entity type.
    */
-  private function getDeduper(string $entityType): ?CRM_ContactinfoDedupe_Dedupe_AbstractDeduper {
-    return match ($entityType) {
+  private function getDeduper(string $entityType, bool $ignorePlus4 = false, bool $ignoreGeocode = false): ?CRM_ContactinfoDedupe_Dedupe_AbstractDeduper {
+    $deduper = match ($entityType) {
       'address' => new CRM_ContactinfoDedupe_Dedupe_AddressDeduper(),
       'email' => new CRM_ContactinfoDedupe_Dedupe_EmailDeduper(),
       'phone' => new CRM_ContactinfoDedupe_Dedupe_PhoneDeduper(),
       default => null,
     };
+    if ($deduper instanceof CRM_ContactinfoDedupe_Dedupe_AddressDeduper) {
+      if ($ignorePlus4) {
+        $deduper->setIgnorePlus4(true);
+      }
+      if ($ignoreGeocode) {
+        $deduper->setIgnoreGeocode(true);
+      }
+    }
+    return $deduper;
   }
 
 }

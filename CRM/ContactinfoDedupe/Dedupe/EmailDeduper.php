@@ -116,10 +116,12 @@ class CRM_ContactinfoDedupe_Dedupe_EmailDeduper extends CRM_ContactinfoDedupe_De
       $keepRecord['email'] = $normalizedEmail;
     }
 
-    // on_hold: if either has it set, keep it set
-    if (!empty($removeRecord['on_hold']) && empty($keepRecord['on_hold'])) {
-      $fieldChanges['on_hold'] = ['old' => $keepRecord['on_hold'], 'new' => $removeRecord['on_hold']];
-      $keepRecord['on_hold'] = $removeRecord['on_hold'];
+    // on_hold: keep the most restrictive value (0=none, 1=bounce, 2=unsubscribe)
+    $keepHold = (int) ($keepRecord['on_hold'] ?? 0);
+    $removeHold = (int) ($removeRecord['on_hold'] ?? 0);
+    if ($removeHold > $keepHold) {
+      $fieldChanges['on_hold'] = ['old' => $keepHold, 'new' => $removeHold];
+      $keepRecord['on_hold'] = $removeHold;
     }
 
     // hold_date: if both set, keep earliest
@@ -131,6 +133,30 @@ class CRM_ContactinfoDedupe_Dedupe_EmailDeduper extends CRM_ContactinfoDedupe_De
       elseif (strtotime($removeRecord['hold_date']) < strtotime($keepRecord['hold_date'])) {
         $fieldChanges['hold_date'] = ['old' => $keepRecord['hold_date'], 'new' => $removeRecord['hold_date']];
         $keepRecord['hold_date'] = $removeRecord['hold_date'];
+      }
+    }
+
+    // reset_date: keep latest, but only if it's after the final hold_date
+    $finalHoldDate = $keepRecord['hold_date'] ?? null;
+    $bestResetDate = $keepRecord['reset_date'] ?? null;
+    $removeReset = $removeRecord['reset_date'] ?? null;
+    if (!$this->isFieldBlank($removeReset)) {
+      if ($this->isFieldBlank($bestResetDate) || strtotime($removeReset) > strtotime($bestResetDate)) {
+        $bestResetDate = $removeReset;
+      }
+    }
+    // Only keep reset_date if it's after the hold_date (otherwise the hold came after the reset)
+    if (!$this->isFieldBlank($bestResetDate)) {
+      if (!$this->isFieldBlank($finalHoldDate) && strtotime($bestResetDate) <= strtotime($finalHoldDate)) {
+        // Reset is older than hold — clear it
+        if (!$this->isFieldBlank($keepRecord['reset_date'] ?? null)) {
+          $fieldChanges['reset_date'] = ['old' => $keepRecord['reset_date'], 'new' => null];
+          $keepRecord['reset_date'] = null;
+        }
+      }
+      elseif (($keepRecord['reset_date'] ?? null) !== $bestResetDate) {
+        $fieldChanges['reset_date'] = ['old' => $keepRecord['reset_date'] ?? null, 'new' => $bestResetDate];
+        $keepRecord['reset_date'] = $bestResetDate;
       }
     }
 
@@ -146,9 +172,14 @@ class CRM_ContactinfoDedupe_Dedupe_EmailDeduper extends CRM_ContactinfoDedupe_De
       $params = [1 => [$actualKeepId, 'Integer']];
       $i = 2;
       foreach ($fieldChanges as $field => $change) {
-        $setClauses[] = "{$field} = %{$i}";
-        $params[$i] = [$change['new'] ?? '', 'String'];
-        $i++;
+        if ($change['new'] === null) {
+          $setClauses[] = "{$field} = NULL";
+        }
+        else {
+          $setClauses[] = "{$field} = %{$i}";
+          $params[$i] = [$change['new'], 'String'];
+          $i++;
+        }
       }
       CRM_Core_DAO::executeQuery(
         "UPDATE civicrm_email SET " . implode(', ', $setClauses) . " WHERE id = %1",
@@ -180,14 +211,9 @@ class CRM_ContactinfoDedupe_Dedupe_EmailDeduper extends CRM_ContactinfoDedupe_De
    * {@inheritdoc}
    */
   protected function hasFieldConflicts(array $record1, array $record2): bool {
-    $conflictFields = ['on_hold', 'hold_date', 'signature_text', 'signature_html'];
-    foreach ($conflictFields as $field) {
-      $v1 = $record1[$field] ?? null;
-      $v2 = $record2[$field] ?? null;
-      if (!$this->isFieldBlank($v1) && !$this->isFieldBlank($v2) && (string) $v1 !== (string) $v2) {
-        return true;
-      }
-    }
+    // on_hold and hold_date have explicit merge strategies (keep hold if either set,
+    // keep earliest date) so they are never conflicts.
+    // signature fields use highest-ID-wins, so also not conflicts.
     return false;
   }
 
@@ -227,7 +253,7 @@ class CRM_ContactinfoDedupe_Dedupe_EmailDeduper extends CRM_ContactinfoDedupe_De
   }
 
   private function buildDuplicateRow(object $dao): array {
-    $locTypes = CRM_Core_BAO_Address::buildOptions('location_type_id', 'get');
+    $locTypes = CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
 
     return [
       'id1' => (int) $dao->id1,

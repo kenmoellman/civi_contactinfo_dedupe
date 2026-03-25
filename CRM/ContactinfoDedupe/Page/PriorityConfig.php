@@ -14,15 +14,15 @@ class CRM_ContactinfoDedupe_Page_PriorityConfig extends CRM_Core_Page {
   public function run(): void {
     CRM_Utils_System::setTitle(E::ts('Contact Info Dedupe - Priority Configuration'));
 
-    // Handle AJAX save request
-    $action = CRM_Utils_Request::retrieve('action_type', 'String', $this, false);
+    // Handle AJAX save request — avoid session caching
+    $action = CRM_Utils_Request::retrieve('action_type', 'String');
     if ($action === 'save') {
       $this->handleSave();
       return;
     }
 
     // Load location types
-    $locationTypes = CRM_Core_BAO_LocationType::buildOptions('location_type_id', 'get');
+    $locationTypes = CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
 
     // Load current priorities
     $priorities = [];
@@ -77,8 +77,7 @@ class CRM_ContactinfoDedupe_Page_PriorityConfig extends CRM_Core_Page {
     $data = json_decode($rawInput, true);
 
     if (!isset($data['priorities']) || !is_array($data['priorities'])) {
-      CRM_Utils_JSON::output(['success' => false, 'error' => 'Invalid data']);
-      return;
+      $this->sendJson(['success' => false, 'error' => 'Invalid data']);
     }
 
     // Clear existing priorities
@@ -98,7 +97,16 @@ class CRM_ContactinfoDedupe_Page_PriorityConfig extends CRM_Core_Page {
       }
     }
 
-    CRM_Utils_JSON::output(['success' => true]);
+    $this->sendJson(['success' => true]);
+  }
+
+  /**
+   * Send a JSON response and exit, bypassing CiviCRM page rendering.
+   */
+  private function sendJson(array $data): void {
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    CRM_Utils_System::civiExit();
   }
 
 }

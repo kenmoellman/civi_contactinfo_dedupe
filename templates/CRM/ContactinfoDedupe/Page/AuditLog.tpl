@@ -143,7 +143,7 @@
     function loadAuditLog() {
       var params = {
         action_type: 'fetch',
-        page: auditPage,
+        pg: auditPage,
         page_size: 25
       };
 

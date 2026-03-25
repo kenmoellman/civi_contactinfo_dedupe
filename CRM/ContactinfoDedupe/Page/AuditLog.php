@@ -13,8 +13,8 @@ class CRM_ContactinfoDedupe_Page_AuditLog extends CRM_Core_Page {
   public function run(): void {
     CRM_Utils_System::setTitle(E::ts('Contact Info Dedupe - Audit Log'));
 
-    // Handle AJAX request for data
-    $action = CRM_Utils_Request::retrieve('action_type', 'String', $this, false);
+    // Handle AJAX request for data — avoid session caching
+    $action = CRM_Utils_Request::retrieve('action_type', 'String');
     if ($action === 'fetch') {
       $this->handleFetch();
       return;
@@ -29,11 +29,11 @@ class CRM_ContactinfoDedupe_Page_AuditLog extends CRM_Core_Page {
    * Handle AJAX fetch of audit log entries.
    */
   private function handleFetch(): void {
-    $page = CRM_Utils_Request::retrieve('page', 'Integer', $this, false, 1);
-    $pageSize = CRM_Utils_Request::retrieve('page_size', 'Integer', $this, false, 25);
-    $entityType = CRM_Utils_Request::retrieve('entity_type', 'String', $this, false);
-    $contactId = CRM_Utils_Request::retrieve('contact_id', 'Integer', $this, false);
-    $status = CRM_Utils_Request::retrieve('status', 'String', $this, false);
+    $page = CRM_Utils_Request::retrieve('pg', 'Integer', CRM_Core_DAO::$_nullObject, false, 1);
+    $pageSize = CRM_Utils_Request::retrieve('page_size', 'Integer', CRM_Core_DAO::$_nullObject, false, 25);
+    $entityType = CRM_Utils_Request::retrieve('entity_type', 'String');
+    $contactId = CRM_Utils_Request::retrieve('contact_id', 'Integer');
+    $status = CRM_Utils_Request::retrieve('status', 'String');
 
     $offset = ($page - 1) * $pageSize;
 
@@ -106,7 +106,7 @@ class CRM_ContactinfoDedupe_Page_AuditLog extends CRM_Core_Page {
       ];
     }
 
-    CRM_Utils_JSON::output([
+    $this->sendJson([
       'success' => true,
       'entries' => $entries,
       'total' => $total,
@@ -114,6 +114,15 @@ class CRM_ContactinfoDedupe_Page_AuditLog extends CRM_Core_Page {
       'page_size' => $pageSize,
       'total_pages' => $pageSize > 0 ? ceil($total / $pageSize) : 0,
     ]);
+  }
+
+  /**
+   * Send a JSON response and exit, bypassing CiviCRM page rendering.
+   */
+  private function sendJson(array $data): void {
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    CRM_Utils_System::civiExit();
   }
 
 }

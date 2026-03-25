@@ -34,11 +34,21 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
   /**
    * {@inheritdoc}
    */
+  /**
+   * SQL expression to normalize a phone column to digits only, stripping leading 1 from 11-digit numbers.
+   */
+  private static function phoneNormSql(string $col): string {
+    $digits = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE({$col},''), '-', ''), '(', ''), ')', ''), ' ', ''), '+', ''), '.', '')";
+    // Strip leading 1 from 11-digit US numbers
+    return "IF(LENGTH({$digits}) = 11 AND {$digits} LIKE '1%', SUBSTRING({$digits}, 2), {$digits})";
+  }
+
   public function findDuplicates(?int $startContactId, ?int $endContactId, int $limit = 25, int $offset = 0): array {
     $scope = $this->buildContactScope('p1', $startContactId, $endContactId);
 
-    // We compare using the phone_numeric field (digits only) plus phone_type_id.
-    // We also normalize by stripping leading 1 from 11-digit numbers.
+    $norm1 = self::phoneNormSql('p1.phone');
+    $norm2 = self::phoneNormSql('p2.phone');
+
     $sql = "
       SELECT
         p1.id AS id1, p2.id AS id2,
@@ -52,7 +62,11 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
       INNER JOIN civicrm_phone p2
         ON p1.contact_id = p2.contact_id
         AND p1.id < p2.id
-        AND COALESCE(p1.phone_type_id, 0) = COALESCE(p2.phone_type_id, 0)
+        AND (COALESCE(p1.phone_type_id, 0) = COALESCE(p2.phone_type_id, 0)
+             OR p1.phone_type_id IS NULL
+             OR p2.phone_type_id IS NULL)
+        AND ({$norm1}) = ({$norm2})
+        AND COALESCE(p1.phone, '') != ''
       INNER JOIN civicrm_contact c ON c.id = p1.contact_id
       WHERE {$scope}
         AND c.is_deleted = 0
@@ -67,12 +81,7 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
 
     $duplicates = [];
     while ($dao->fetch()) {
-      // Post-filter: compare normalized phone numbers
-      $norm1 = self::normalizePhone($dao->phone1);
-      $norm2 = self::normalizePhone($dao->phone2);
-      if ($norm1 !== '' && $norm1 === $norm2) {
-        $duplicates[] = $this->buildDuplicateRow($dao);
-      }
+      $duplicates[] = $this->buildDuplicateRow($dao);
     }
 
     $total = $this->countDuplicates($startContactId, $endContactId);
@@ -86,21 +95,23 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
   public function countDuplicates(?int $startContactId, ?int $endContactId): int {
     $scope = $this->buildContactScope('p1', $startContactId, $endContactId);
 
-    // For counting, we need to do a more precise query.
-    // We use a subquery approach to normalize the phone numbers.
+    $norm1 = self::phoneNormSql('p1.phone');
+    $norm2 = self::phoneNormSql('p2.phone');
+
     $sql = "
       SELECT COUNT(*) as cnt
       FROM civicrm_phone p1
       INNER JOIN civicrm_phone p2
         ON p1.contact_id = p2.contact_id
         AND p1.id < p2.id
-        AND COALESCE(p1.phone_type_id, 0) = COALESCE(p2.phone_type_id, 0)
+        AND (COALESCE(p1.phone_type_id, 0) = COALESCE(p2.phone_type_id, 0)
+             OR p1.phone_type_id IS NULL
+             OR p2.phone_type_id IS NULL)
+        AND ({$norm1}) = ({$norm2})
+        AND COALESCE(p1.phone, '') != ''
       INNER JOIN civicrm_contact c ON c.id = p1.contact_id
       WHERE {$scope}
         AND c.is_deleted = 0
-        AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p1.phone,''), '-', ''), '(', ''), ')', ''), ' ', ''), '+', '')
-          = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p2.phone,''), '-', ''), '(', ''), ')', ''), ' ', ''), '+', '')
-        AND COALESCE(p1.phone, '') != ''
     ";
 
     return (int) CRM_Core_DAO::singleValueQuery($sql);
@@ -128,17 +139,35 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
       return false;
     }
 
-    $decision = $this->determineKeepAndRemove($keepRecord, $removeRecord);
-    if ($decision === null) {
-      return false;
+    // If one has a phone_type_id and the other doesn't, always keep the typed one
+    $keepType = $keepRecord['phone_type_id'] ?? null;
+    $removeType = $removeRecord['phone_type_id'] ?? null;
+    $keepHasType = !$this->isFieldBlank($keepType);
+    $removeHasType = !$this->isFieldBlank($removeType);
+
+    if ($keepHasType && !$removeHasType) {
+      $actualKeepId = (int) $keepRecord['id'];
+      $actualRemoveId = (int) $removeRecord['id'];
     }
-
-    [$actualKeepId, $actualRemoveId] = $decision;
-
-    if ($actualKeepId !== $keepId) {
+    elseif (!$keepHasType && $removeHasType) {
+      $actualKeepId = (int) $removeRecord['id'];
+      $actualRemoveId = (int) $keepRecord['id'];
       $temp = $keepRecord;
       $keepRecord = $removeRecord;
       $removeRecord = $temp;
+    }
+    else {
+      $decision = $this->determineKeepAndRemove($keepRecord, $removeRecord);
+      if ($decision === null) {
+        return false;
+      }
+      [$actualKeepId, $actualRemoveId] = $decision;
+
+      if ($actualKeepId !== (int) $keepRecord['id']) {
+        $temp = $keepRecord;
+        $keepRecord = $removeRecord;
+        $removeRecord = $temp;
+      }
     }
 
     $fieldChanges = [];
@@ -219,7 +248,7 @@ class CRM_ContactinfoDedupe_Dedupe_PhoneDeduper extends CRM_ContactinfoDedupe_De
   }
 
   private function buildDuplicateRow(object $dao): array {
-    $locTypes = CRM_Core_BAO_Address::buildOptions('location_type_id', 'get');
+    $locTypes = CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
     $phoneTypes = CRM_Core_PseudoConstant::get('CRM_Core_DAO_Phone', 'phone_type_id');
 
     return [

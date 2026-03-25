@@ -12,8 +12,8 @@
     <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
   </urls>
   <releaseDate>2026-03-23</releaseDate>
-  <version>1.0.0-alpha1</version>
-  <develStage>alpha</develStage>
+  <version>1.0.0</version>
+  <develStage>stable</develStage>
   <compatibility>
     <ver>6.9</ver>
   </compatibility>
@@ -38,5 +38,5 @@
     <namespace>CRM/ContactinfoDedupe</namespace>
     <format>25.10.2</format>
   </civix>
-  <upgrader>CiviMix\Schema\ContactinfoDedupe\AutomaticUpgrader</upgrader>
+  <upgrader>CRM_ContactinfoDedupe_Upgrader</upgrader>
 </extension>

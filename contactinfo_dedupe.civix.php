@@ -109,6 +109,14 @@ function _contactinfo_dedupe_civix_civicrm_config($config = NULL) {
   $extRoot = __DIR__ . DIRECTORY_SEPARATOR;
   $include_path = $extRoot . PATH_SEPARATOR . get_include_path();
   set_include_path($include_path);
+
+  // Add templates directory to Smarty search path
+  $templateDir = $extRoot . 'templates' . DIRECTORY_SEPARATOR;
+  $smarty = CRM_Core_Smarty::singleton();
+  $existingDirs = $smarty->getTemplateDir();
+  if (!in_array($templateDir, $existingDirs)) {
+    $smarty->addTemplateDir($templateDir, 'contactinfo_dedupe');
+  }
 }
 
 /**

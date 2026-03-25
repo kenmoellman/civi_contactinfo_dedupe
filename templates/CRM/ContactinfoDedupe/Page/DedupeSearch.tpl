@@ -43,11 +43,29 @@
             <input type="number" id="end-contact-id" class="crm-form-text" placeholder="{ts}To{/ts}" min="1" />
           </td>
         </tr>
+        <tr id="address-options-row">
+          <td class="label">{ts}Address Options{/ts}</td>
+          <td>
+            <label>
+              <input type="checkbox" id="ignore-plus4" />
+              {ts}Ignore conflicting +4 ZIP suffix{/ts}
+            </label>
+            <p class="description">{ts}When checked, records that only differ by postal code suffix (+4) will be merged and the suffix will be cleared on the kept record.{/ts}</p>
+            <label style="margin-top: 5px; display: block;">
+              <input type="checkbox" id="ignore-geocode" />
+              {ts}Ignore conflicting geocodes{/ts}
+            </label>
+            <p class="description">{ts}When checked, records that only differ by latitude/longitude will be merged and the geocodes will be cleared on the kept record.{/ts}</p>
+          </td>
+        </tr>
       </table>
 
       <div class="crm-submit-buttons">
         <button id="btn-find-duplicates" class="crm-button crm-form-submit" {if !$hasPriorities}disabled="disabled"{/if}>
           <span class="crm-i fa-search"></span> {ts}Find Duplicates{/ts}
+        </button>
+        <button id="btn-apply-consensus" class="crm-button" {if !$hasPriorities}disabled="disabled"{/if} style="display: none;">
+          <span class="crm-i fa-balance-scale"></span> {ts}Apply Consensus{/ts}
         </button>
       </div>
     </div>
@@ -98,8 +116,12 @@
 
   <div id="dedupe-status" class="messages" style="display: none;"></div>
   <div id="dedupe-processing" style="display: none;">
-    <div class="crm-loading-element"></div>
-    <p>{ts}Processing duplicates... Please wait.{/ts}</p>
+    <div class="dedupe-overlay"></div>
+    <div class="dedupe-modal">
+      <div class="crm-loading-element"></div>
+      <p>{ts}Processing duplicates... Please wait.{/ts}</p>
+      <p class="dedupe-modal-sub">{ts}This may take a while for large datasets. Do not close this page.{/ts}</p>
+    </div>
   </div>
 </div>
 
@@ -125,20 +147,48 @@
     margin: 0 15px;
   {rdelim}
   .crm-loading-element {ldelim}
-    width: 32px;
-    height: 32px;
-    margin: 10px auto;
-    border: 3px solid #ddd;
-    border-top: 3px solid #0071bd;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 15px;
+    border: 4px solid #ddd;
+    border-top: 4px solid #0071bd;
     border-radius: 50%;
     animation: spin 1s linear infinite;
   {rdelim}
   @keyframes spin {ldelim}
     to {ldelim} transform: rotate(360deg); {rdelim}
   {rdelim}
-  #dedupe-processing {ldelim}
+  .dedupe-overlay {ldelim}
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99999;
+  {rdelim}
+  .dedupe-modal {ldelim}
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    padding: 40px 50px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 100000;
     text-align: center;
-    padding: 20px;
+    min-width: 350px;
+  {rdelim}
+  .dedupe-modal p {ldelim}
+    font-size: 16px;
+    font-weight: bold;
+    margin: 10px 0 5px;
+  {rdelim}
+  .dedupe-modal .dedupe-modal-sub {ldelim}
+    font-size: 13px;
+    font-weight: normal;
+    color: #666;
   {rdelim}
   #select-all-label {ldelim}
     font-weight: bold;
@@ -152,6 +202,19 @@
     var totalPages = 0;
     var totalCount = 0;
     var selectAllMode = false;
+
+    // Toggle address options based on entity type
+    function updateAddressOptions() {
+      if ($('#dedupe-entity-type').val() === 'address') {
+        $('#address-options-row').show();
+        $('#btn-apply-consensus').show();
+      } else {
+        $('#address-options-row').hide();
+        $('#btn-apply-consensus').hide();
+      }
+    }
+    $('#dedupe-entity-type').on('change', updateAddressOptions);
+    updateAddressOptions();
 
     // Toggle contact range fields
     $('input[name="dedupe-scope"]').on('change', function() {
@@ -174,7 +237,7 @@
       var params = {
         action_type: 'find',
         entity_type: $('#dedupe-entity-type').val(),
-        page: currentPage,
+        pg: currentPage,
         page_size: 25
       };
       if ($('input[name="dedupe-scope"]:checked').val() === 'range') {
@@ -182,6 +245,12 @@
         var endId = $('#end-contact-id').val();
         if (startId) params.start_id = startId;
         if (endId) params.end_id = endId;
+      }
+      if ($('#ignore-plus4').is(':checked')) {
+        params.ignore_plus4 = 1;
+      }
+      if ($('#ignore-geocode').is(':checked')) {
+        params.ignore_geocode = 1;
       }
       return params;
     }
@@ -342,14 +411,21 @@
 
     function processSelected(pairs) {
       $('#dedupe-processing').show();
+      var postData = {
+        entity_type: $('#dedupe-entity-type').val(),
+        pairs: pairs
+      };
+      if ($('#ignore-plus4').is(':checked')) {
+        postData.ignore_plus4 = 1;
+      }
+      if ($('#ignore-geocode').is(':checked')) {
+        postData.ignore_geocode = 1;
+      }
       $.ajax({
         url: CRM.url('civicrm/admin/contactinfo-dedupe/search', {action_type: 'process'}),
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({
-          entity_type: $('#dedupe-entity-type').val(),
-          pairs: pairs
-        }),
+        data: JSON.stringify(postData),
         dataType: 'json',
         success: function(response) {
           $('#dedupe-processing').hide();
@@ -379,6 +455,12 @@
         if (startId) params.start_id = parseInt(startId);
         if (endId) params.end_id = parseInt(endId);
       }
+      if ($('#ignore-plus4').is(':checked')) {
+        params.ignore_plus4 = 1;
+      }
+      if ($('#ignore-geocode').is(':checked')) {
+        params.ignore_geocode = 1;
+      }
 
       $.ajax({
         url: CRM.url('civicrm/admin/contactinfo-dedupe/search', {action_type: 'process_all'}),
@@ -401,6 +483,43 @@
         }
       });
     }
+
+    // Apply Consensus
+    $('#btn-apply-consensus').on('click', function() {
+      var scopeParams = {};
+      if ($('input[name="dedupe-scope"]:checked').val() === 'range') {
+        var startId = $('#start-contact-id').val();
+        var endId = $('#end-contact-id').val();
+        if (startId) scopeParams.start_id = parseInt(startId);
+        if (endId) scopeParams.end_id = parseInt(endId);
+      }
+      if (!confirm('Apply consensus values to address groups with 3+ duplicates' +
+        (scopeParams.start_id ? ' (contacts ' + scopeParams.start_id + '-' + (scopeParams.end_id || '...') + ')' : '') +
+        '? This will update outlier records to match the majority. This action cannot be undone.')) return;
+
+      $('#dedupe-processing').show();
+      $.ajax({
+        url: CRM.url('civicrm/admin/contactinfo-dedupe/search', {action_type: 'consensus'}),
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(scopeParams),
+        dataType: 'json',
+        success: function(response) {
+          $('#dedupe-processing').hide();
+          if (response.success) {
+            showStatus('ok', 'Consensus applied: ' + response.groups_processed + ' group(s), ' +
+              response.fields_updated + ' field(s) updated.');
+            if (totalCount > 0) loadDuplicates();
+          } else {
+            showStatus('error', response.error || 'Consensus failed');
+          }
+        },
+        error: function() {
+          $('#dedupe-processing').hide();
+          showStatus('error', 'Error communicating with server.');
+        }
+      });
+    });
 
     function showStatus(type, message) {
       var $status = $('#dedupe-status');
