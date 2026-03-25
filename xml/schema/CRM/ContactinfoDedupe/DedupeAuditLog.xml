@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="iso-8859-1" ?>
+<table>
+  <base>CRM/ContactinfoDedupe</base>
+  <class>DedupeAuditLog</class>
+  <name>civicrm_contactinfo_dedupe_audit_log</name>
+  <comment>Audit log for contact info deduplication actions</comment>
+  <log>true</log>
+
+  <field>
+    <name>id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>Unique AuditLog ID</comment>
+    <html>
+      <type>Number</type>
+    </html>
+  </field>
+  <primaryKey>
+    <name>id</name>
+    <autoincrement>true</autoincrement>
+  </primaryKey>
+
+  <field>
+    <name>entity_type</name>
+    <type>varchar</type>
+    <length>32</length>
+    <required>true</required>
+    <comment>Entity type: address, email, or phone</comment>
+  </field>
+  <index>
+    <name>IX_entity_type</name>
+    <fieldName>entity_type</fieldName>
+  </index>
+
+  <field>
+    <name>contact_id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>FK to Contact</comment>
+  </field>
+  <foreignKey>
+    <name>contact_id</name>
+    <table>civicrm_contact</table>
+    <key>id</key>
+    <onDelete>CASCADE</onDelete>
+  </foreignKey>
+  <index>
+    <name>IX_contact_id</name>
+    <fieldName>contact_id</fieldName>
+  </index>
+
+  <field>
+    <name>kept_entity_id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>ID of the record that was kept</comment>
+  </field>
+
+  <field>
+    <name>removed_entity_id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>ID of the record that was removed</comment>
+  </field>
+
+  <field>
+    <name>status</name>
+    <type>varchar</type>
+    <length>16</length>
+    <required>true</required>
+    <comment>Status: changed or removed</comment>
+  </field>
+
+  <field>
+    <name>field_changes</name>
+    <type>text</type>
+    <comment>JSON-encoded field changes (old and new values)</comment>
+  </field>
+
+  <field>
+    <name>created_date</name>
+    <type>datetime</type>
+    <required>true</required>
+    <default>CURRENT_TIMESTAMP</default>
+    <comment>When the action was performed</comment>
+  </field>
+  <index>
+    <name>IX_created_date</name>
+    <fieldName>created_date</fieldName>
+  </index>
+
+  <field>
+    <name>created_by</name>
+    <type>int unsigned</type>
+    <comment>FK to Contact who performed the action</comment>
+  </field>
+</table>

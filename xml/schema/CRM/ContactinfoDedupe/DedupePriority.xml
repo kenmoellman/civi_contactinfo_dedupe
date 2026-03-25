@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="iso-8859-1" ?>
+<table>
+  <base>CRM/ContactinfoDedupe</base>
+  <class>DedupePriority</class>
+  <name>civicrm_contactinfo_dedupe_priority</name>
+  <comment>Location type priority ranking for contact info deduplication</comment>
+  <log>true</log>
+
+  <field>
+    <name>id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>Unique Priority ID</comment>
+    <html>
+      <type>Number</type>
+    </html>
+  </field>
+  <primaryKey>
+    <name>id</name>
+    <autoincrement>true</autoincrement>
+  </primaryKey>
+
+  <field>
+    <name>location_type_id</name>
+    <type>int unsigned</type>
+    <required>true</required>
+    <comment>FK to LocationType</comment>
+  </field>
+  <foreignKey>
+    <name>location_type_id</name>
+    <table>civicrm_location_type</table>
+    <key>id</key>
+    <onDelete>CASCADE</onDelete>
+  </foreignKey>
+  <index>
+    <name>UI_location_type_id</name>
+    <fieldName>location_type_id</fieldName>
+    <unique>true</unique>
+  </index>
+
+  <field>
+    <name>priority</name>
+    <type>int</type>
+    <required>true</required>
+    <default>0</default>
+    <comment>Priority rank (lower number = higher priority)</comment>
+    <html>
+      <type>Number</type>
+    </html>
+  </field>
+  <index>
+    <name>UI_priority</name>
+    <fieldName>priority</fieldName>
+    <unique>true</unique>
+  </index>
+</table>

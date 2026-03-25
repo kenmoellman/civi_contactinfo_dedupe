@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<menu>
+  <item>
+    <path>civicrm/admin/contactinfo-dedupe/priority</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_PriorityConfig</page_callback>
+    <title>Contact Info Dedupe - Priority Configuration</title>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+  <item>
+    <path>civicrm/admin/contactinfo-dedupe/search</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_DedupeSearch</page_callback>
+    <title>Contact Info Dedupe - Cleanup</title>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+  <item>
+    <path>civicrm/admin/contactinfo-dedupe/audit</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_AuditLog</page_callback>
+    <title>Contact Info Dedupe - Audit Log</title>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+  <item>
+    <path>civicrm/ajax/contactinfo-dedupe/find-duplicates</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_DedupeSearch</page_callback>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+  <item>
+    <path>civicrm/ajax/contactinfo-dedupe/process</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_DedupeSearch</page_callback>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+  <item>
+    <path>civicrm/ajax/contactinfo-dedupe/save-priority</path>
+    <page_callback>CRM_ContactinfoDedupe_Page_PriorityConfig</page_callback>
+    <access_arguments>administer CiviCRM</access_arguments>
+  </item>
+</menu>

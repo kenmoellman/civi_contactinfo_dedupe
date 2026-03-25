@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<extension key="contactinfo_dedupe" type="module">
+  <file>contactinfo_dedupe</file>
+  <name>Contact Info Dedupe</name>
+  <description>Deduplicate address, email, and phone records within contacts by configurable location type priority.</description>
+  <license>AGPL-3.0</license>
+  <maintainer>
+    <author>LP Tech</author>
+    <email>tech@lp.org</email>
+  </maintainer>
+  <urls>
+    <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
+  </urls>
+  <releaseDate>2026-03-23</releaseDate>
+  <version>1.0.0-alpha1</version>
+  <develStage>alpha</develStage>
+  <compatibility>
+    <ver>6.9</ver>
+  </compatibility>
+  <smarty_compatibility>
+    <ver>2</ver>
+    <ver>5</ver>
+  </smarty_compatibility>
+  <php_compatibility>
+    <ver>8.3</ver>
+    <ver>8.4</ver>
+  </php_compatibility>
+  <classloader>
+    <psr0 prefix="CRM_" path="."/>
+    <psr4 prefix="Civi\" path="Civi"/>
+  </classloader>
+  <mixins>
+    <mixin>menu-xml@1.0.0</mixin>
+    <mixin>scan-classes@1.0.0</mixin>
+    <mixin>setting-php@1.0.0</mixin>
+  </mixins>
+  <civix>
+    <namespace>CRM/ContactinfoDedupe</namespace>
+    <format>25.10.2</format>
+  </civix>
+  <upgrader>CiviMix\Schema\ContactinfoDedupe\AutomaticUpgrader</upgrader>
+</extension>
