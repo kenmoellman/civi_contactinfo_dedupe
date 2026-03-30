@@ -9,6 +9,9 @@
     <email>civicrm@moellman.com</email>
   </maintainer>
   <urls>
+    <url desc="Main Extension Page">https://github.com/kenmoellman/civi_contactinfo_dedupe</url>
+    <url desc="Documentation">https://github.com/kenmoellman/civi_contactinfo_dedupe/blob/main/README.md</url>
+    <url desc="Support">https://github.com/kenmoellman/civi_contactinfo_dedupe/issues</url>
     <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
   </urls>
   <releaseDate>2026-03-23</releaseDate>
